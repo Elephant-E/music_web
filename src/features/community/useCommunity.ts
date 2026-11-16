@@ -32,6 +32,8 @@ export function useCommunity() {
   const scopedHistory = computed(() => Boolean(route.query.entity_type || route.query.entity_id))
   const inspect = ref<Activity>()
   const dialog = ref(false)
+  const roleDialog = ref(false)
+  const roleChange = ref<{ member: User; role: User['role'] }>()
   const titles = { history: '操作记录', members: '成员', inbox: '消息' }
   const emptyStates = {
     history: { title: '暂无匹配记录', description: '试试其他操作分类、成员名字或日期。' },
@@ -43,6 +45,9 @@ export function useCommunity() {
     { value: 'edit', label: '编辑' },
     { value: 'admin', label: '管理员' },
   ]
+  function roleLabel(value: unknown) {
+    return roleOptions.find((option) => option.value === value)?.label || formatValue(value)
+  }
   function updateQuery(values: Record<string, string | undefined>) {
     void router.push({ query: { ...route.query, ...values } })
   }
@@ -78,8 +83,8 @@ export function useCommunity() {
       .filter(([key]) => JSON.stringify(log.before?.[key]) !== JSON.stringify(log.after?.[key]))
       .map(([key, label]) => ({
         label,
-        before: formatValue(log.before?.[key]),
-        after: formatValue(log.after?.[key]),
+        before: key === 'role' ? roleLabel(log.before?.[key]) : formatValue(log.before?.[key]),
+        after: key === 'role' ? roleLabel(log.after?.[key]) : formatValue(log.after?.[key]),
       }))
   })
   async function load() {
@@ -131,6 +136,8 @@ export function useCommunity() {
   watch(
     () => route.fullPath,
     () => {
+      roleDialog.value = false
+      roleChange.value = undefined
       q.value = String(route.query.q || '')
       historyFilters.category = String(route.query.category || defaultHistoryCategory)
       historyFilters.user = String(route.query.user || '')
@@ -156,9 +163,21 @@ export function useCommunity() {
       await load()
     })
   }
-  async function role(user: User, value: User['role']) {
+  function canChangeRole(user: User) {
+    return sign.isAdmin && user.id !== sign.user?.id
+  }
+  function changeRole(user: User, value: User['role']) {
+    if (acting.value || !canChangeRole(user) || user.role === value) return
+    roleChange.value = { member: { ...user }, role: value }
+    roleDialog.value = true
+  }
+  async function confirmRoleChange() {
+    const change = roleChange.value
+    if (!roleDialog.value || !change || !canChangeRole(change.member)) return
     await run(async () => {
-      await api.patch(`members/${user.id}/role`, { json: { role: value } })
+      await api.patch(`members/${change.member.id}/role`, { json: { role: change.role } })
+      roleDialog.value = false
+      roleChange.value = undefined
       notify('角色已更新。')
       await load()
     })
@@ -182,9 +201,12 @@ export function useCommunity() {
     scopedHistory,
     inspect,
     dialog,
+    roleDialog,
+    roleChange,
     titles,
     emptyStates,
     roleOptions,
+    roleLabel,
     searchMembers,
     searchHistory,
     showAllHistory,
@@ -192,6 +214,8 @@ export function useCommunity() {
     load,
     restore,
     read,
-    role,
+    canChangeRole,
+    changeRole,
+    confirmRoleChange,
   }
 }

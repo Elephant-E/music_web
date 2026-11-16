@@ -24,9 +24,12 @@ const {
   scopedHistory,
   inspect,
   dialog,
+  roleDialog,
+  roleChange,
   titles,
   emptyStates,
   roleOptions,
+  roleLabel,
   searchMembers,
   searchHistory,
   showAllHistory,
@@ -34,7 +37,9 @@ const {
   load,
   restore,
   read,
-  role,
+  canChangeRole,
+  changeRole,
+  confirmRoleChange,
 } = useCommunity()
 </script>
 <template>
@@ -137,21 +142,22 @@ const {
           >{{ displayName(member).slice(0, 1) }}</span
         >
         <div class="member-name">
-          <strong>{{ displayName(member) }}</strong><span class="hint">{{
-            member.role === 'admin' ? '管理员' : member.role === 'edit' ? '编辑' : '用户'
-          }}</span>
+          <strong>{{ displayName(member) }}</strong>
+          <BaseSelect
+            v-if="canChangeRole(member)"
+            :disabled="acting || busy"
+            :label="`修改 ${displayName(member)} 的角色`"
+            :model-value="member.role"
+            :options="roleOptions"
+            :searchable="false"
+            class="member-role"
+            @update:model-value="changeRole(member, $event)"
+          />
+          <span v-else class="badge quiet member-role">{{ roleLabel(member.role) }}</span>
         </div>
         <div class="member-contribution">
           <strong>{{ bytes(member.size_upload) }}</strong><span class="hint">累计上传</span>
         </div>
-        <BaseSelect
-          v-if="sign.user?.role === 'admin'"
-          :disabled="acting"
-          :label="`调整 ${displayName(member)} 的角色`"
-          :model-value="member.role"
-          :options="roleOptions"
-          @update:model-value="role(member, $event)"
-        />
       </article>
     </div>
     <div v-if="section === 'inbox' && messages.length" class="message-list">
@@ -210,7 +216,12 @@ const {
       <p v-if="inspect.action === 'merged'" class="hint">
         合并后的资料或音频如有修改，将无法自动恢复，请手动调整。
       </p>
-      <p v-if="inspect.before && inspect.entity_type !== 'playlists'" class="hint">
+      <p
+        v-if="
+          inspect.before && ['songs', 'albums', 'artists', 'files'].includes(inspect.entity_type)
+        "
+        class="hint"
+      >
         只能恢复该条目最近一次操作前的版本。
       </p>
     </div>
@@ -230,6 +241,22 @@ const {
       </button></template
     ></BaseDialog
   >
+  <BaseDialog v-model="roleDialog" :busy="acting" title="确认修改角色">
+    <div v-if="roleChange" class="form-stack">
+      <p>
+        确认将 <strong>{{ displayName(roleChange.member) }}</strong> 的角色从
+        <strong>{{ roleLabel(roleChange.member.role) }}</strong> 修改为
+        <strong>{{ roleLabel(roleChange.role) }}</strong>？
+      </p>
+      <p class="hint">修改后将按新角色授予权限，并写入操作记录。</p>
+    </div>
+    <template #footer>
+      <button :disabled="acting" class="button secondary" @click="roleDialog = false">取消</button>
+      <button :disabled="acting" class="button primary" @click="confirmRoleChange">
+        {{ acting ? '正在修改…' : '确认修改' }}
+      </button>
+    </template>
+  </BaseDialog>
 </template>
 
 <style scoped>
@@ -311,8 +338,24 @@ const {
   font-size: 13px;
   overflow-wrap: anywhere;
 }
-.member-name .hint {
+.member-role {
+  align-self: flex-start;
+}
+.member-role :deep(.select-trigger) {
+  width: auto;
+  min-height: 0;
+  gap: 4px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--lilac);
+  color: var(--purple-dark);
   font-size: 11px;
+  font-weight: 500;
+  line-height: 1.6;
+}
+.member-role :deep(.select-trigger:hover:not(:disabled)) {
+  background: #e5d9f7;
 }
 .member-contribution {
   display: flex;
@@ -327,10 +370,6 @@ const {
 }
 .member-contribution .hint {
   font-size: 11px;
-}
-.member-list :deep(.select-control) {
-  width: 105px;
-  margin-left: 8px;
 }
 .message-list {
   display: flex;
@@ -422,9 +461,6 @@ const {
   }
   .ranking {
     width: 16px;
-  }
-  .member-list :deep(.select-control) {
-    margin-left: auto;
   }
   .message {
     padding: 12px;
