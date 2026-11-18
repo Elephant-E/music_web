@@ -14,6 +14,7 @@ import SongList from '@/components/SongList.vue'
 import Pagination from '@/components/Pagination.vue'
 import EditorDialog from '@/components/EditorDialog.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
+import BaseDialog from '@/components/BaseDialog.vue'
 
 const catalog = useCatalog()
 const {
@@ -44,11 +45,14 @@ const {
   selectedSongs,
   create,
   editing,
+  privatePlaylist,
   selected,
   acting,
   layout,
   edit,
   newItem,
+  canMakePrivate,
+  makePrivate,
   toggle,
   bulkFavorite,
   favorite,
@@ -186,7 +190,7 @@ const {
         @select-all="selected = $event ? items.map((item) => item.id) : []"
       />
     </div>
-    <div v-else-if="items.length" :class="['catalog', layout]">
+    <div v-else-if="items.length" :class="['catalog', layout, { playlists: type === 'playlists' }]">
       <div v-if="layout === 'list'" class="entity-label">
         <span>{{ labels[type] }}</span><span>{{
           type === 'playlists' || type === 'libraries'
@@ -228,7 +232,17 @@ const {
             · {{ item.release_year || '' }} {{ item.edition }}</span
           ></span
         >
-        <RouterLink :to="`/${type}/${item.id}`" class="text-link entity-action">查看</RouterLink>
+        <div class="entity-actions">
+          <RouterLink :to="`/${type}/${item.id}`" class="text-link">查看</RouterLink>
+          <button
+            v-if="canMakePrivate(item)"
+            :disabled="acting"
+            class="text-button"
+            @click="privatePlaylist = item"
+          >
+            设为私密
+          </button>
+        </div>
       </article>
     </div>
     <div v-else-if="!error && !busy" class="empty panel">
@@ -273,6 +287,26 @@ const {
   />
   <EditorDialog v-model="assignAlbum" :tracks="selectedSongs" type="songs" @saved="saved" />
   <EditorDialog v-model="create" :item="editing" :type="type" @saved="saved" />
+  <BaseDialog
+    :busy="acting"
+    :model-value="!!privatePlaylist"
+    title="设为私密歌单"
+    @update:model-value="
+      (value) => {
+        if (!value) privatePlaylist = undefined
+      }
+    "
+  >
+    <p>将「{{ privatePlaylist?.name }}」设为创建者的私密歌单，之后仅创建者和协作者可见。</p>
+    <template #footer>
+      <button :disabled="acting" class="button secondary" @click="privatePlaylist = undefined">
+        取消
+      </button>
+      <button :disabled="acting" class="button primary" @click="makePrivate">
+        {{ acting ? '正在处理…' : '确认设为私密' }}
+      </button>
+    </template>
+  </BaseDialog>
 </template>
 
 <style scoped>
@@ -325,10 +359,16 @@ const {
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
+.catalog {
+  --entity-action-width: 48px;
+}
+.catalog.playlists {
+  --entity-action-width: 110px;
+}
 .entity-label,
 .list .entity-row {
   display: grid;
-  grid-template-columns: minmax(180px, 2fr) minmax(100px, 1fr) 80px 48px;
+  grid-template-columns: minmax(180px, 2fr) minmax(100px, 1fr) 80px var(--entity-action-width);
   align-items: center;
   gap: 14px;
   padding: 10px 20px;
@@ -422,8 +462,16 @@ const {
   display: inline-block;
   margin-top: 8px;
 }
-.grid .entity-action {
+.entity-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+}
+.grid .entity-actions {
   float: right;
+  margin-top: 8px;
 }
 .catalog-pagination {
   display: flex;
@@ -439,9 +487,15 @@ const {
   margin: 0;
 }
 @media (max-width: 680px) {
+  .catalog {
+    --entity-action-width: 34px;
+  }
+  .catalog.playlists {
+    --entity-action-width: 64px;
+  }
   .entity-label,
   .list .entity-row {
-    grid-template-columns: minmax(120px, 1fr) 65px 34px;
+    grid-template-columns: minmax(120px, 1fr) 65px var(--entity-action-width);
     gap: 8px;
     padding-inline: 10px;
   }

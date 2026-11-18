@@ -24,3 +24,7 @@ export function saveCatalogItem(type: CatalogType, body: Record<string, unknown>
     item: Entity
   }>()
 }
+
+export function makePlaylistPrivate(id: string) {
+  return api.post(`playlists/${id}/private`).json<{ message: string }>()
+}

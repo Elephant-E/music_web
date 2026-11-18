@@ -170,6 +170,14 @@ const lyricInput = ref<HTMLInputElement>()
           ><button v-if="canEdit" class="button secondary" @click="editor = true">
             ✎ 编辑资料
           </button>
+          <button
+            v-if="type === 'playlists' && item.is_public && sign.canModerate"
+            :disabled="acting"
+            class="button secondary"
+            @click="openOperation('playlist-private')"
+          >
+            设为私密
+          </button>
           <details class="action-menu">
             <summary>更多 ⋯</summary>
             <div
@@ -757,11 +765,13 @@ const lyricInput = ref<HTMLInputElement>()
             ? '添加歌曲'
             : operation === 'playlist-move'
               ? '调整曲序'
-              : operation === 'file-move'
-                ? '移动音频'
-                : operation === 'file-delete'
-                  ? '删除资源'
-                  : `删除${labels[type]}`
+              : operation === 'playlist-private'
+                ? '设为私密歌单'
+                : operation === 'file-move'
+                  ? '移动音频'
+                  : operation === 'file-delete'
+                    ? '删除资源'
+                    : `删除${labels[type]}`
       "
       :wide="operation === 'tracks'"
       @update:model-value="
@@ -770,6 +780,9 @@ const lyricInput = ref<HTMLInputElement>()
         }
       "
       ><div class="form-stack">
+        <p v-if="operation === 'playlist-private'">
+          将「{{ item.name }}」设为创建者的私密歌单，之后仅创建者和协作者可见。
+        </p>
         <p v-if="operation === 'delete'" class="hint">
           {{
             type === 'playlists'
@@ -878,9 +891,11 @@ const lyricInput = ref<HTMLInputElement>()
                 ? '添加到歌单'
                 : operation === 'merge'
                   ? '确认合并'
-                  : operation === 'file-move' || operation === 'playlist-move'
-                    ? '确认移动'
-                    : '确认删除'
+                  : operation === 'playlist-private'
+                    ? '确认设为私密'
+                    : operation === 'file-move' || operation === 'playlist-move'
+                      ? '确认移动'
+                      : '确认删除'
           }}
         </button></template
       ></BaseDialog

@@ -6,6 +6,7 @@ import { useSignStore } from '@/stores/sign'
 import { notify, useAction } from '@/composables/useFeedback'
 import type { Entity } from '@/types/catalog'
 import type { useCatalog } from './useCatalog'
+import { makePlaylistPrivate } from './api'
 
 export function useCatalogActions(catalog: ReturnType<typeof useCatalog>) {
   const { type, items, favorites, load } = catalog
@@ -20,6 +21,7 @@ export function useCatalogActions(catalog: ReturnType<typeof useCatalog>) {
   )
   const create = ref(false)
   const editing = ref<Entity>()
+  const privatePlaylist = ref<Entity>()
   const selected = ref<string[]>([])
   const { busy: acting, run } = useAction()
   const views = useStorage<Record<string, string>>('music-catalog-views', {})
@@ -40,6 +42,18 @@ export function useCatalogActions(catalog: ReturnType<typeof useCatalog>) {
     if (!canCreate.value) return
     editing.value = undefined
     create.value = true
+  }
+  function canMakePrivate(item: Entity) {
+    return type.value === 'playlists' && sign.canModerate && !!item.is_public
+  }
+  async function makePrivate() {
+    if (!privatePlaylist.value || !canMakePrivate(privatePlaylist.value)) return
+    await run(async () => {
+      const result = await makePlaylistPrivate(privatePlaylist.value!.id)
+      privatePlaylist.value = undefined
+      notify(result.message)
+      await load()
+    })
   }
   function toggle(id: string) {
     selected.value = selected.value.includes(id)
@@ -89,11 +103,14 @@ export function useCatalogActions(catalog: ReturnType<typeof useCatalog>) {
     selectedSongs,
     create,
     editing,
+    privatePlaylist,
     selected,
     acting,
     layout,
     edit,
     newItem,
+    canMakePrivate,
+    makePrivate,
     toggle,
     bulkFavorite,
     favorite,

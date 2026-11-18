@@ -6,14 +6,21 @@ import type { Page } from '@/types/common'
 import type { AudioFile } from '@/types/uploads'
 import { notify, useAction } from '@/composables/useFeedback'
 import { useSignStore } from '@/stores/sign'
-import { catalogPath } from './api'
+import { catalogPath, makePlaylistPrivate } from './api'
 import type { useEntityDetail } from './useEntityDetail'
 
 type DetailOperation =
-  '' | 'delete' | 'merge' | 'file-delete' | 'file-move' | 'tracks' | 'playlist-move'
+  | ''
+  | 'delete'
+  | 'merge'
+  | 'file-delete'
+  | 'file-move'
+  | 'tracks'
+  | 'playlist-move'
+  | 'playlist-private'
 
 export function useDetailOperations(detail: ReturnType<typeof useEntityDetail>) {
-  const { type, id, item, songs, page, total, songPageSize, load } = detail
+  const { type, id, backTo, item, songs, page, total, songPageSize, load } = detail
   const router = useRouter()
   const sign = useSignStore()
   const { busy, run } = useAction()
@@ -59,6 +66,10 @@ export function useDetailOperations(detail: ReturnType<typeof useEntityDetail>) 
         await api.delete(path, { json: { version: item.value.version, reason: reason.value } })
         notify(type === 'playlists' ? '歌单已删除。' : '已删除，可从操作记录中恢复。')
         await router.push(`/${type}`)
+      } else if (operation.value === 'playlist-private') {
+        const result = await makePlaylistPrivate(id)
+        notify(result.message)
+        await router.push(backTo)
       } else if (operation.value === 'merge' && target.value) {
         await api.post(`${path}/merge`, {
           json: {
