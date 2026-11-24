@@ -3,11 +3,17 @@ import { computed, reactive, ref } from 'vue'
 import type { Entity } from '@/types/catalog'
 import { useSignStore } from '@/stores/sign'
 import { usePlayerStore } from '@/stores/player'
+import { useQueueStore } from '@/stores/queue'
 import { ACTIVE_UPLOAD_STATES, TRANSMIT_STATES } from '@/features/uploads/model'
 import { catalogLabels as labels } from '@/features/catalog/config'
 import { useEntityDetail } from '@/features/catalog/useEntityDetail'
 import { useDetailOperations } from '@/features/catalog/useDetailOperations'
 import { useSongUploads } from '@/features/catalog/useSongUploads'
+import { getCatalogPage } from '@/features/catalog/api'
+import api from '@/utils/ky'
+import { notify, report } from '@/composables/useFeedback'
+import { QUEUE_LIMIT } from '@/stores/queue'
+import type { Page } from '@/types/common'
 import { lyricFormats, lyricKinds, useSongLyrics } from '@/features/catalog/useSongLyrics'
 import EntityCover from '@/components/EntityCover.vue'
 import EditorDialog from '@/components/EditorDialog.vue'
@@ -20,6 +26,7 @@ import { bytes, date, displayName, duration, qualities } from '@/utils/format'
 
 const sign = useSignStore()
 const player = usePlayerStore()
+const queue = useQueueStore()
 const detail = useEntityDetail()
 const {
   type,
@@ -37,6 +44,33 @@ const {
   loadSongs,
 } = detail
 const currentSongPlaying = computed(() => player.song?.id === item.value?.id && player.playing)
+const queueLabel = type === 'albums' ? '专辑' : type === 'playlists' ? '歌单' : ''
+async function playAll() {
+  const filter: Record<string, string | number> = {}
+  if (type === 'albums') filter.album_id = id
+  if (type === 'artists') filter.artist_id = id
+  if (type === 'libraries') filter.library_id = id
+  try {
+    // 播放全部要覆盖整张专辑/整个歌单，而不只是当前这一页，也不能被队列上限静默截断。
+    const collected: Entity[] = []
+    let total = Infinity
+    for (let page = 1; collected.length < QUEUE_LIMIT && collected.length < total; page += 1) {
+      const params = { ...filter, page, page_size: 500 }
+      const result =
+        type === 'playlists'
+          ? await api.get(`playlists/${id}/songs`, { searchParams: params }).json<Page<Entity>>()
+          : await getCatalogPage('songs', params)
+      total = result.total
+      if (!result.items.length) break
+      collected.push(...result.items)
+    }
+    const items = collected.slice(0, QUEUE_LIMIT)
+    if (total > items.length) notify(`队列最多 ${QUEUE_LIMIT} 首，已加入前 ${items.length} 首。`)
+    await player.playList(items, 0, queueLabel)
+  } catch (e) {
+    report(e)
+  }
+}
 const {
   busy: operationBusy,
   run,
@@ -150,7 +184,7 @@ const lyricInput = ref<HTMLInputElement>()
             :aria-label="`${currentSongPlaying ? '暂停' : '试听'} ${item.name}`"
             :title="currentSongPlaying ? '暂停' : '试听'"
             class="button primary detail-play"
-            @click="player.song?.id === item.id ? player.toggle() : player.playSong(item)"
+            @click="queue.isCurrent(item.id) ? player.toggle() : player.playList([item], 0, '单曲')"
           >
             <svg aria-hidden="true" class="ui-icon playback-icon" viewBox="0 0 24 24">
               <path :d="currentSongPlaying ? 'M6 5h4v14H6zM14 5h4v14h-4z' : 'm8 5 11 7-11 7Z'" />
@@ -404,6 +438,9 @@ const lyricInput = ref<HTMLInputElement>()
           {{ type === 'playlists' ? '歌单曲目' : '收录的歌曲' }}
           <span class="muted">{{ total }}</span>
         </h2>
+        <div v-if="songs.length" class="button-group">
+          <button class="button secondary" @click="playAll">播放全部</button>
+        </div>
         <div v-if="type === 'playlists' && editable" class="button-group">
           <button :disabled="acting" class="button primary" @click="tracks">添加歌曲</button>
           <button
@@ -438,6 +475,7 @@ const lyricInput = ref<HTMLInputElement>()
           :disabled="acting"
           :editable="type === 'albums'"
           :items="songs"
+          :label="queueLabel"
           :offset="(page - 1) * songPageSize"
           :selectable="type === 'playlists' && editable && managingTracks"
           :selected="selectedEntries"
