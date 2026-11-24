@@ -6,7 +6,6 @@ import { useAppShell } from '@/app/useAppShell'
 const {
   sign,
   uploads,
-  player,
   route,
   booting,
   bootError,
@@ -14,6 +13,7 @@ const {
   unread,
   signingOut,
   accountName,
+  playerVisible,
   playbackLinks,
   navigation,
   isActive,
@@ -57,7 +57,7 @@ const {
       </a>
     </main>
   </div>
-  <div v-else :class="['app-shell', { 'player-visible': player.available }]">
+  <div v-else :class="['app-shell', { 'player-visible': playerVisible }]">
     <aside id="app-navigation" :class="['sidebar', { expanded: menu }]" aria-label="主导航">
       <div class="sidebar-brand">
         <RouterLink class="brand" to="/" @click="closeNavigation">
