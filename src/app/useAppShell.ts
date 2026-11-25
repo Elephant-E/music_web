@@ -4,6 +4,7 @@ import { useEventListener } from '@vueuse/core'
 import { useSignStore } from '@/stores/sign'
 import { useUploadsStore } from '@/stores/uploads'
 import { usePlayerStore } from '@/stores/player'
+import { useQueueStore } from '@/stores/queue'
 import { report, useAction } from '@/composables/useFeedback'
 import { displayName } from '@/utils/format'
 import api from '@/utils/ky'
@@ -13,6 +14,7 @@ export function useAppShell() {
   const sign = useSignStore()
   const uploads = useUploadsStore()
   const player = usePlayerStore()
+  const queue = useQueueStore()
   const route = useRoute()
   const router = useRouter()
   const booting = ref(true)
@@ -22,6 +24,7 @@ export function useAppShell() {
   const menuButton = useTemplateRef<HTMLButtonElement>('menuButton')
   const { busy: signingOut, run: runSignOut } = useAction()
   const accountName = computed(() => displayName(sign.user || undefined))
+  const playerVisible = computed(() => player.available || !!queue.current)
   const navidromeIcon = '/web/safari-pinned-tab.svg'
   const playbackLinks = computed(() => [
     { name: 'Navidrome', href: sign.serverUrl, icon: navidromeIcon },
@@ -41,6 +44,7 @@ export function useAppShell() {
     try {
       await router.isReady()
       await sign.hydrate()
+      if (sign.user) queue.restore(sign.user.id)
       bootError.value = sign.loginError
       await refreshUnread()
     } catch (e) {
@@ -60,6 +64,7 @@ export function useAppShell() {
   function expired() {
     uploads.stop()
     player.close()
+    queue.reset()
     sign.user = null
     report(new Error('登录已过期，请重新登录。'))
   }
@@ -94,6 +99,7 @@ export function useAppShell() {
     closeNavigation()
     uploads.stop()
     player.close()
+    queue.reset()
   })
   useEventListener(window, 'beforeunload', (event: BeforeUnloadEvent) => {
     if (uploads.activeCount > 0) {
@@ -115,6 +121,7 @@ export function useAppShell() {
     unread,
     signingOut,
     accountName,
+    playerVisible,
     playbackLinks,
     navigation,
     isActive,

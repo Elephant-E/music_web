@@ -180,6 +180,7 @@ const {
       <SongList
         :disabled="acting"
         :items="items"
+        :label="'歌曲'"
         :offset="(page - 1) * pageSize"
         :selected="selected"
         editable

@@ -2,8 +2,9 @@
 import { computed, ref } from 'vue'
 import type { Entity } from '@/types/catalog'
 import { usePlayerStore } from '@/stores/player'
+import { useQueueStore } from '@/stores/queue'
 import api from '@/utils/ky'
-import { report } from '@/composables/useFeedback'
+import { notify, report } from '@/composables/useFeedback'
 import EntityCover from './EntityCover.vue'
 
 const props = withDefaults(
@@ -16,8 +17,9 @@ const props = withDefaults(
     editable?: boolean
     trackNumbers?: boolean
     albumContextId?: string
+    label?: string
   }>(),
-  { offset: 0, editable: false },
+  { offset: 0, editable: false, label: '' },
 )
 const emit = defineEmits<{
   select: [id: string]
@@ -26,6 +28,7 @@ const emit = defineEmits<{
   edit: [song: Entity]
 }>()
 const player = usePlayerStore()
+const queue = useQueueStore()
 const favoriting = ref(new Set<string>())
 const allSelected = computed(
   () =>
@@ -59,9 +62,21 @@ async function favorite(song: Entity) {
     favoriting.value.delete(song.id)
   }
 }
-function play(song: Entity) {
-  if (player.song?.id === song.id) void player.toggle()
-  else void player.playSong(song)
+function play(song: Entity, index: number) {
+  if (queue.isCurrent(song.id)) {
+    void player.toggle()
+    return
+  }
+  // 点哪一首，就把当前这份列表整体变成播放队列。
+  void player.playList(props.items, index, props.label)
+}
+function enqueue(song: Entity) {
+  queue.append([song])
+  notify(`已加入队列：${song.name}`)
+}
+function playNext(song: Entity) {
+  queue.insertNext([song])
+  notify(`下一首播放：${song.name}`)
 }
 </script>
 
@@ -87,7 +102,7 @@ function play(song: Entity) {
       :class="[
         'song-row',
         'song-grid',
-        { playing: player.song?.id === song.id, selected: selected?.includes(rowKey(song)) },
+        { playing: queue.isCurrent(song.id), selected: selected?.includes(rowKey(song)) },
       ]"
     >
       <input
@@ -109,7 +124,7 @@ function play(song: Entity) {
               : '试听'
         "
         class="song-play"
-        @click="play(song)"
+        @click="play(song, index)"
       >
         <span class="song-index">{{
           trackNumbers
@@ -205,7 +220,25 @@ function play(song: Entity) {
             class="icon-button"
             title="上传音频"
             >↑</RouterLink
+          ><button
+            :aria-label="`把 ${song.name} 加入队列`"
+            class="icon-button queue-action"
+            title="加入队列"
+            @click="enqueue(song)"
           >
+            <svg aria-hidden="true" class="ui-icon" viewBox="0 0 24 24">
+              <path d="M4 6h11M4 11h11M4 16h7M18 9v8M14 13h8" />
+            </svg></button
+          ><button
+            :aria-label="`下一首播放 ${song.name}`"
+            class="icon-button queue-action"
+            title="下一首播放"
+            @click="playNext(song)"
+          >
+            <svg aria-hidden="true" class="ui-icon" viewBox="0 0 24 24">
+              <path d="M4 6h9M4 11h9M4 16h6M16 8v7M16 8l4 2.5-4 2.5" />
+            </svg>
+          </button>
         </slot>
       </div>
     </article>
@@ -224,7 +257,7 @@ function play(song: Entity) {
 }
 .song-grid {
   display: grid;
-  grid-template-columns: 28px minmax(150px, 2fr) minmax(90px, 1fr) minmax(100px, 1fr) 82px 106px;
+  grid-template-columns: 28px minmax(150px, 2fr) minmax(90px, 1fr) minmax(100px, 1fr) 82px 152px;
   align-items: center;
   gap: 14px;
   padding: 10px 18px;
@@ -232,7 +265,7 @@ function play(song: Entity) {
 .selectable .song-grid {
   grid-template-columns:
     20px 28px minmax(150px, 2fr) minmax(90px, 1fr) minmax(100px, 1fr)
-    82px 106px;
+    82px 152px;
 }
 .song-label {
   min-height: 44px;
@@ -364,12 +397,12 @@ function play(song: Entity) {
 }
 @container (max-width: 800px) {
   .song-grid {
-    grid-template-columns: 26px minmax(140px, 1.7fr) minmax(90px, 1fr) 82px 106px;
+    grid-template-columns: 26px minmax(140px, 1.7fr) minmax(90px, 1fr) 82px 152px;
     gap: 8px;
     padding-inline: 14px;
   }
   .selectable .song-grid {
-    grid-template-columns: 20px 26px minmax(140px, 1.7fr) minmax(90px, 1fr) 82px 106px;
+    grid-template-columns: 20px 26px minmax(140px, 1.7fr) minmax(90px, 1fr) 82px 152px;
   }
   .song-artists {
     display: none;
@@ -389,7 +422,8 @@ function play(song: Entity) {
     grid-template-columns: 20px 26px minmax(120px, 1fr) 82px 70px;
   }
   .song-album,
-  .song-actions .edit {
+  .song-actions .edit,
+  .song-actions .queue-action {
     display: none;
   }
 }
