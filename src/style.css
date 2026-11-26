@@ -18,6 +18,9 @@
   --success: #23774c;
   --radius: 12px;
   --sidebar-width: 224px;
+  /* 播放器尺寸：QueuePanel 等需要避让它的地方统一引用，避免散落的魔法数 */
+  --player-height: 76px;
+  --player-offset: 16px;
   --page-gutter: clamp(24px, 3.2vw, 56px);
 }
 

@@ -58,8 +58,9 @@ export const usePlayerStore = defineStore('player', () => {
     return !!audio.canPlayType(f.mime_type)
   }
 
-  function pickFile(full: Entity): AudioFile | null {
-    const files = full.files || []
+  /** 按用户音质偏好挑文件；入参可能是残缺载荷，函数本身保证不抛错 */
+  function pickFile(full: Entity | null | undefined): AudioFile | null {
+    const files = full?.files ?? []
     const quality = sign.user?.quality
     return (
       files.find((item) => item.quality === quality && item.is_default) ||
@@ -125,6 +126,8 @@ export const usePlayerStore = defineStore('player', () => {
         cached && cached.id === entry.songId && cached.files?.length
           ? cached
           : (await getCatalogItem('songs', entry.songId)).item
+      // 详情接口异常（例如返回空对象）时给出可读提示
+      if (!full) throw new Error('歌曲信息加载失败，请检查网络或稍后重试。')
       const selected = pickFile(full)
       if (!selected) throw new Error('这首歌还没有音频，请先上传。')
       if (!supported(selected))

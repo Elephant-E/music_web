@@ -9,11 +9,9 @@ import { catalogLabels as labels } from '@/features/catalog/config'
 import { useEntityDetail } from '@/features/catalog/useEntityDetail'
 import { useDetailOperations } from '@/features/catalog/useDetailOperations'
 import { useSongUploads } from '@/features/catalog/useSongUploads'
-import { getCatalogPage } from '@/features/catalog/api'
-import api from '@/utils/ky'
+import { getAllSongs } from '@/features/catalog/songs'
 import { notify, report } from '@/composables/useFeedback'
 import { QUEUE_LIMIT } from '@/stores/queue'
-import type { Page } from '@/types/common'
 import { lyricFormats, lyricKinds, useSongLyrics } from '@/features/catalog/useSongLyrics'
 import EntityCover from '@/components/EntityCover.vue'
 import EditorDialog from '@/components/EditorDialog.vue'
@@ -45,30 +43,19 @@ const {
 } = detail
 const currentSongPlaying = computed(() => player.song?.id === item.value?.id && player.playing)
 const queueLabel = type === 'albums' ? '专辑' : type === 'playlists' ? '歌单' : ''
+const playingAll = ref(false)
 async function playAll() {
-  const filter: Record<string, string | number> = {}
-  if (type === 'albums') filter.album_id = id
-  if (type === 'artists') filter.artist_id = id
-  if (type === 'libraries') filter.library_id = id
+  if (playingAll.value) return
+  playingAll.value = true
   try {
-    // 播放全部要覆盖整张专辑/整个歌单，而不只是当前这一页，也不能被队列上限静默截断。
-    const collected: Entity[] = []
-    let total = Infinity
-    for (let page = 1; collected.length < QUEUE_LIMIT && collected.length < total; page += 1) {
-      const params = { ...filter, page, page_size: 500 }
-      const result =
-        type === 'playlists'
-          ? await api.get(`playlists/${id}/songs`, { searchParams: params }).json<Page<Entity>>()
-          : await getCatalogPage('songs', params)
-      total = result.total
-      if (!result.items.length) break
-      collected.push(...result.items)
-    }
-    const items = collected.slice(0, QUEUE_LIMIT)
+    // 拉全量、按后端页大小翻页、异常守卫都在 getAllSongs 里，这里只表达意图
+    const { items, total } = await getAllSongs(type, id, QUEUE_LIMIT)
     if (total > items.length) notify(`队列最多 ${QUEUE_LIMIT} 首，已加入前 ${items.length} 首。`)
     await player.playList(items, 0, queueLabel)
   } catch (e) {
     report(e)
+  } finally {
+    playingAll.value = false
   }
 }
 const {
@@ -203,6 +190,14 @@ const lyricInput = ref<HTMLInputElement>()
             {{ item.is_favorite ? '已收藏' : '收藏' }}</button
           ><button v-if="canEdit" class="button secondary" @click="editor = true">
             ✎ 编辑资料
+          </button>
+          <button
+            v-if="songs.length"
+            :disabled="playingAll"
+            class="button secondary"
+            @click="playAll"
+          >
+            {{ playingAll ? '正在读取…' : '播放全部' }}
           </button>
           <button
             v-if="type === 'playlists' && item.is_public && sign.canModerate"
@@ -438,9 +433,6 @@ const lyricInput = ref<HTMLInputElement>()
           {{ type === 'playlists' ? '歌单曲目' : '收录的歌曲' }}
           <span class="muted">{{ total }}</span>
         </h2>
-        <div v-if="songs.length" class="button-group">
-          <button class="button secondary" @click="playAll">播放全部</button>
-        </div>
         <div v-if="type === 'playlists' && editable" class="button-group">
           <button :disabled="acting" class="button primary" @click="tracks">添加歌曲</button>
           <button
