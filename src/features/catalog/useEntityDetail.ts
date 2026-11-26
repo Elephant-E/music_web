@@ -1,12 +1,12 @@
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import api from '@/utils/ky'
 import type { CatalogType, Entity } from '@/types/catalog'
-import type { Page } from '@/types/common'
 import { report } from '@/composables/useFeedback'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { catalogReturnTo } from '@/router'
-import { getCatalogItem, getCatalogPage } from './api'
+import { getCatalogItem } from './api'
+import { DETAIL_SONG_PAGE_SIZE } from './limits'
+import { assertPage, getSongPage } from './songs'
 
 export function useEntityDetail() {
   const route = useRoute()
@@ -28,20 +28,13 @@ export function useEntityDetail() {
   async function loadSongs() {
     const signal = songsRequest.start()
     try {
-      const params: Record<string, string | number> = { page: page.value, page_size: 24 }
-      if (type === 'albums') params.album_id = id
-      if (type === 'artists') params.artist_id = id
-      if (type === 'libraries') params.library_id = id
-      const result =
-        type === 'playlists'
-          ? await api
-              .get(`playlists/${id}/songs`, { searchParams: params, signal })
-              .json<Page<Entity>>()
-          : await getCatalogPage('songs', params, signal)
+      const result = assertPage(
+        await getSongPage(type, id, page.value, DETAIL_SONG_PAGE_SIZE, signal),
+      )
       if (signal.aborted) return
       songs.value = result.items
-      total.value = result.total
-      songPageSize.value = result.page_size
+      total.value = Number(result.total)
+      songPageSize.value = Number(result.page_size) || DETAIL_SONG_PAGE_SIZE
     } catch (error) {
       if (!signal.aborted) report(error)
     }

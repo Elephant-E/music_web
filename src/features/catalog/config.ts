@@ -1,5 +1,6 @@
 import type { CatalogType } from '@/types/catalog'
 import { qualities } from '@/utils/format'
+import { PAGE_SIZES } from './limits'
 
 export const catalogTypes = ['songs', 'albums', 'artists', 'playlists', 'libraries'] as const
 
@@ -30,4 +31,4 @@ export const sortOptions = [
   { value: 'name', label: '按名称' },
 ]
 
-export const pageOptions = [24, 48, 60].map((value) => ({ value, label: `${value} 条 / 页` }))
+export const pageOptions = PAGE_SIZES.map((value) => ({ value, label: `${value} 条 / 页` }))

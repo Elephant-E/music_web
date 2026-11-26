@@ -2,6 +2,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { type LocationQueryRaw, useRoute, useRouter } from 'vue-router'
 import { useDebounceFn } from '@vueuse/core'
 import { getCatalogPage } from './api'
+import { PAGE_SIZES } from './limits'
 import { useSignStore } from '@/stores/sign'
 import type { CatalogType, Entity } from '@/types/catalog'
 import type { Page } from '@/types/common'
@@ -39,7 +40,7 @@ export function useCatalog() {
   })
   const pageSize = computed({
     get: () =>
-      [24, 48, 60].includes(Number(text('page_size')))
+      PAGE_SIZES.includes(Number(text('page_size')))
         ? Number(text('page_size'))
         : type.value === 'songs'
           ? 48
